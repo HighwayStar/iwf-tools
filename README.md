@@ -42,7 +42,10 @@ instead, for byte-exact forensics.
 - **layout** — `iwf.json` by hand, or with the editor:
   `python3 iwf_gui.py myface` — click to select, drag to move, add/remove
   widgets, edit anything else in the per-widget JSON box, and pack straight
-  from the window.
+  from the window. The editor unpacks too: give it an archive
+  (`python3 iwf_gui.py face.iwf.lz`), or no argument for a file dialog, and it
+  asks where to unpack and opens the result; "open / unpack…" switches to
+  another face the same way.
 - **member names are the watch's lookup keys** — the folder and file names
   under each font directory are how `pack` rebuilds them; renaming a strip
   changes which member it becomes.

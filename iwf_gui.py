@@ -3,12 +3,15 @@
 # Copyright (c) 2026 Vitalii Tomin
 """A small editor for the layout of an unpacked watch-face directory.
 
-    python3 iwf_gui.py face
+    python3 iwf_gui.py face            # an unpacked face directory
+    python3 iwf_gui.py face.iwf.lz     # a .iwf / .iwf.lz: unpacked first, then opened
+    python3 iwf_gui.py                 # pick either from a file dialog
 
 Shows the face composed exactly as iwf_pic.py compose renders it, and lets you
 rearrange it with the mouse: click a widget to select it (its box lights up),
 drag to move, edit the quick x/y/w/h fields or the full JSON of the selected
-widget, add or remove widgets, and save iwf.json. The sample values (time,
+widget, add or remove widgets, and save iwf.json. "open / unpack" switches to
+another face, unpacking it first if it is an archive. The sample values (time,
 date, seconds, battery, weather, bar fill) are preview-only, like compose's,
 and cover every widget type the vendor's own faces use — the strip runs, the
 analog hands, the shortcut slots. Pictures are not edited here —
@@ -49,13 +52,67 @@ MARKER_FOR = {"month": ("_jan_24bit",), "week": ("_mon_24bit",),
 # The three hands render_face draws: the widget field, the prefix its geometry
 # fields carry, and the words a face's hand member is named with. Faces name
 # these themselves — w3 calls its only hand `sec.png` — so match the word.
+FACE_FILETYPES = (("watch faces", "*.iwf *.lz iwf.json"), ("all files", "*"))
 HAND_HINTS = (("hour", "hour", ("hourhand", "hand_h", "hour")),
               ("minute", "min", ("minutehand", "hand_m", "minute", "min")),
               ("second", "sec", ("secondhand", "hand_s", "second", "sec")))
 
 
+def run_iwf(*args):
+    """iwf.py as a separate process, the way the command line runs it.
+    Returns (ok, the text it printed)."""
+    command = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                            "iwf.py")] + list(args)
+    result = subprocess.run(command, capture_output=True, text=True)
+    return result.returncode == 0, (result.stdout or result.stderr).strip()
+
+
+def face_stem(path):
+    """static_10.iwf.lz -> static_10."""
+    name = os.path.basename(path)
+    for suffix in (".lz", ".iwf"):
+        if name.lower().endswith(suffix):
+            name = name[:-len(suffix)]
+    return name or "face"
+
+
+def unpack_face(archive, parent=None):
+    """Unpack an .iwf / .iwf.lz into a folder the user picks (a folder named
+    after the face, made inside it) and return that folder, or None if the
+    user backed out or the unpack failed. Unpacking into a folder that already
+    holds files only overwrites the members, so that needs a yes first."""
+    where = filedialog.askdirectory(
+        parent=parent, initialdir=os.path.dirname(os.path.abspath(archive)),
+        title="unpack %s into (a %s folder is made inside)"
+              % (os.path.basename(archive), face_stem(archive)))
+    if not where:
+        return None
+    target = os.path.join(where, face_stem(archive))
+    if os.path.isdir(target) and os.listdir(target):
+        if not messagebox.askyesno(
+                "unpack", "%s already has files in it — overwrite them?\n"
+                "(files that are not members of this face stay where they are)" % target,
+                parent=parent):
+            return None
+    ok, text = run_iwf("unpack", archive, target)
+    if not ok:
+        messagebox.showerror("unpack", text or "iwf.py unpack failed", parent=parent)
+        return None
+    return target
+
+
+def face_dir_of(path, parent=None):
+    """A face directory from whatever was picked: a directory as it is, an
+    iwf.json as its directory, an archive unpacked."""
+    if os.path.isdir(path):
+        return path
+    if os.path.basename(path) == "iwf.json":
+        return os.path.dirname(path)
+    return unpack_face(path, parent)
+
+
 class FaceEditor:
-    def __init__(self, root, face_dir):
+    def __init__(self, root, face_dir, status=""):
         self.root = root
         self.dir = os.path.abspath(face_dir)
         self.png_dir = pic.png_dir_of(self.dir)
@@ -72,6 +129,7 @@ class FaceEditor:
         self.refreshing = False
         self.build_ui()
         self.render()
+        self.say(status)
 
     # --- ui ----------------------------------------------------------------------------------
 
@@ -161,6 +219,8 @@ class FaceEditor:
 
         actions = ttk.Frame(right)
         actions.pack(fill="x", pady=(6, 0))
+        ttk.Button(actions, text="open / unpack…", command=self.open_face).pack(side="left",
+                                                                            padx=(0, 4))
         ttk.Button(actions, text="save iwf.json", command=self.save).pack(side="left")
         ttk.Button(actions, text="pack .iwf", command=lambda: self.pack(False)).pack(side="left", padx=4)
         ttk.Button(actions, text="pack .iwf.lz", command=lambda: self.pack(True)).pack(side="left")
@@ -481,6 +541,25 @@ class FaceEditor:
             handle.write(json.dumps(self.layout, ensure_ascii=False, separators=(",", ":")))
         self.say("saved %s" % self.layout_path)
 
+    def open_face(self):
+        """Switch to another face — a directory's iwf.json, or an archive,
+        which is unpacked first. Unsaved edits to this one are dropped."""
+        path = filedialog.askopenfilename(parent=self.root, filetypes=FACE_FILETYPES,
+                                          initialdir=os.path.dirname(self.dir))
+        if not path:
+            return
+        face_dir = face_dir_of(path, self.root)
+        if face_dir is None:
+            return
+        if not os.path.exists(os.path.join(face_dir, "iwf.json")):
+            messagebox.showerror("open", "no iwf.json in %s" % face_dir, parent=self.root)
+            return
+        for child in self.root.winfo_children():
+            child.destroy()
+        unpacked = os.path.isfile(path) and os.path.basename(path) != "iwf.json"
+        FaceEditor(self.root, face_dir,
+                   status=("unpacked into %s" % face_dir) if unpacked else "")
+
     def pack(self, packed):
         out = filedialog.asksaveasfilename(
             initialdir=os.path.dirname(self.dir),
@@ -489,19 +568,28 @@ class FaceEditor:
         if not out:
             return
         self.save()
-        command = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                "iwf.py"), "pack", self.dir, out]
-        if packed:
-            command.append("--packed")
-        result = subprocess.run(command, capture_output=True, text=True)
-        self.say((result.stdout or result.stderr).strip())
+        _, text = run_iwf("pack", self.dir, out, *(["--packed"] if packed else []))
+        self.say(text)
 
 
 def main():
-    if len(sys.argv) != 2:
-        raise SystemExit(__doc__.split("\n")[0] + "\nusage: iwf_gui.py FACE_DIR")
+    if len(sys.argv) > 2:
+        raise SystemExit(__doc__.split("\n")[0]
+                         + "\nusage: iwf_gui.py [FACE_DIR | FACE.iwf | FACE.iwf.lz]")
     root = tk.Tk()
-    FaceEditor(root, sys.argv[1])
+    root.withdraw()
+    path = sys.argv[1] if len(sys.argv) == 2 else filedialog.askopenfilename(
+        filetypes=FACE_FILETYPES, title="open a face directory's iwf.json, or an archive")
+    if not path:
+        return
+    if not os.path.exists(path):
+        raise SystemExit("no such file or directory: %s" % path)
+    face_dir = face_dir_of(path)
+    if face_dir is None:
+        return
+    unpacked = not os.path.isdir(path) and os.path.basename(path) != "iwf.json"
+    FaceEditor(root, face_dir, status=("unpacked into %s" % face_dir) if unpacked else "")
+    root.deiconify()
     root.mainloop()
 
 
