@@ -122,3 +122,9 @@ The watch's LZ4 decoder needs the **canonical end-of-block rules**: the stream m
 literals-only sequence (≥ 5 bytes) and the last match must start ≥ 12 bytes before the end.
 A block whose final match runs to the last byte decodes fine elsewhere but leaves garbage in
 the bottom rows on the watch — which is why `iwf_pic.py`'s compressor stops short.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE). realme and VeryFit are trademarks of their respective
+owners; this project is not affiliated with or endorsed by either. No vendor watch faces or
+firmware are included.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Vitalii Tomin
 """Inspect, unpack and repack the watch's `.iwf` watch-face archives.
 
 The archive is the Ido/VeryFit "watch plate" container described in PROTOCOL.md 4.11.1: an

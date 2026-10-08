@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Vitalii Tomin
 """Decode and rebuild the pictures inside an unpacked watch-face directory.
 
 The picture members of a `.iwf` archive (see iwf.py) are not PNGs whatever their

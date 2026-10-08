@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Vitalii Tomin
 """A small editor for the layout of an unpacked watch-face directory.
 
     python3 iwf_gui.py face
